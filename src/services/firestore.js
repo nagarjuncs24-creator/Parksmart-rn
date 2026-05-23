@@ -1,58 +1,176 @@
 // Enhanced Firestore service with all CRUD operations
 import { db } from '../config/firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  getDoc,
+  addDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+} from 'firebase/firestore';
 
-// Parking Spots
+const usersCollection = collection(db, 'users');
+const adminsCollection = collection(db, 'admins');
+const slotsCollection = collection(db, 'parkingSpots');
+const bookingsCollection = collection(db, 'bookings');
+const reportsCollection = collection(db, 'reports');
+const analyticsCollection = collection(db, 'analytics');
+
+export async function checkAdminAccess(email) {
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  const q = query(adminsCollection, where('email', '==', normalized));
+  const snapshot = await getDocs(q);
+  return !snapshot.empty;
+}
+
+export async function getUserById(uid) {
+  if (!uid) return null;
+  const docRef = doc(usersCollection, uid);
+  const snapshot = await getDoc(docRef);
+  return snapshot.exists() ? { uid: snapshot.id, ...snapshot.data() } : null;
+}
+
 export async function getParkingSpots() {
-  const col = collection(db, 'parkingSpots');
-  const snapshot = await getDocs(col);
-  return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  const q = query(slotsCollection, orderBy('createdAt', 'asc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
 }
 
-export async function addParkingSpot(spot) {
-  return await addDoc(collection(db, 'parkingSpots'), spot);
+export async function createSlot(slot) {
+  return await addDoc(slotsCollection, {
+    ...slot,
+    status: slot.status || 'available',
+    createdAt: serverTimestamp(),
+  });
 }
 
-export async function updateParkingSpot(spotId, updates) {
-  await updateDoc(doc(db, 'parkingSpots', spotId), updates);
+export async function removeSlot(slotId) {
+  return await deleteDoc(doc(slotsCollection, slotId));
 }
 
-// Bookings
+export async function updateSlotStatus(slotId, status) {
+  return await updateDoc(doc(slotsCollection, slotId), {
+    status,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function createBooking(booking) {
-  return await addDoc(collection(db, 'bookings'), booking);
+  return await addDoc(bookingsCollection, {
+    ...booking,
+    status: booking.status || 'pending',
+    createdAt: serverTimestamp(),
+  });
 }
 
 export async function getUserBookings(userId) {
-  const q = query(collection(db, 'bookings'), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+  const q = query(bookingsCollection, where('userId', '==', userId), orderBy('createdAt', 'desc'));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
 export async function updateBooking(bookingId, updates) {
-  await updateDoc(doc(db, 'bookings', bookingId), updates);
+  return await updateDoc(doc(bookingsCollection, bookingId), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  });
 }
 
-// Reports
 export async function submitReport(report) {
-  return await addDoc(collection(db, 'reports'), report);
+  return await addDoc(reportsCollection, {
+    ...report,
+    createdAt: serverTimestamp(),
+  });
 }
 
 export async function getReports(latitude, longitude, radiusKm = 1) {
-  const col = collection(db, 'reports');
-  const snapshot = await getDocs(col);
+  const snapshot = await getDocs(reportsCollection);
   return snapshot.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(r => {
+    .filter((r) => {
       const dist = Math.sqrt((r.latitude - latitude) ** 2 + (r.longitude - longitude) ** 2);
       return dist < radiusKm / 111;
     });
 }
 
-// Analytics
 export async function saveAnalytics(userId, event) {
-  await addDoc(collection(db, 'analytics'), {
+  return await addDoc(analyticsCollection, {
     userId,
     event,
-    timestamp: Date.now(),
+    timestamp: serverTimestamp(),
   });
+}
+
+export async function getParkingStats() {
+  const [slotsSnapshot, bookingsSnapshot, usersSnapshot] = await Promise.all([
+    getDocs(slotsCollection),
+    getDocs(bookingsCollection),
+    getDocs(usersCollection),
+  ]);
+
+  const slots = slotsSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  const bookings = bookingsSnapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+
+  const totalUsers = usersSnapshot.size;
+  const totalBookings = bookings.length;
+  const availableSlots = slots.filter((slot) => slot.status === 'available').length;
+  const occupiedSlots = slots.filter((slot) => slot.status !== 'available').length;
+
+  const peakHour = calculatePeakBookingHour(bookings);
+
+  return {
+    totalUsers,
+    totalBookings,
+    availableSlots,
+    occupiedSlots,
+    peakBookingHour: peakHour.label,
+    peakBookingCount: peakHour.count,
+  };
+}
+
+function calculatePeakBookingHour(bookings) {
+  const hourCount = bookings.reduce((acc, booking) => {
+    const createdAt = booking.createdAt;
+    let date = null;
+    if (createdAt?.toDate) {
+      date = createdAt.toDate();
+    } else if (createdAt?.seconds) {
+      date = new Date(createdAt.seconds * 1000);
+    } else if (typeof createdAt === 'number') {
+      date = new Date(createdAt);
+    }
+    if (!date) return acc;
+    const hour = date.getHours();
+    acc[hour] = (acc[hour] || 0) + 1;
+    return acc;
+  }, {});
+
+  const peakHour = Object.entries(hourCount).sort((a, b) => b[1] - a[1])[0];
+  if (!peakHour) {
+    return { label: 'No bookings yet', count: 0 };
+  }
+  return { label: `${peakHour[0]}:00`, count: peakHour[1] };
+}
+
+export function subscribeToSlotsRealtime(callback) {
+  const q = query(slotsCollection, orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snapshot) => callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))));
+}
+
+export function subscribeToBookingsRealtime(callback) {
+  const q = query(bookingsCollection, orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snapshot) => callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))));
+}
+
+export function subscribeToUsersRealtime(callback) {
+  const q = query(usersCollection, orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snapshot) => callback(snapshot.docs.map((docSnap) => ({ uid: docSnap.id, ...docSnap.data() }))));
 }
