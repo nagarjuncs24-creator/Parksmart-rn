@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Share, Alert, Linking } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { colors } from '../constants/theme';
-import { getBookingById, getSlotById, subscribeToBookingRealtime, cancelBooking } from '../services/firestore';
+import { getSlotById, subscribeToBookingRealtime } from '../services/firestore';
+import { getBookingAreaName, getBookingSlotName } from '../utils/profileStats';
+import { buildBookingQrPayload } from '../utils/bookingHelpers';
 
 const formatDate = (timestamp) => {
   if (!timestamp) return 'Unknown';
@@ -50,10 +52,7 @@ export default function TicketScreen({ navigation, route }) {
           if (diff <= 0) {
             clearInterval(interval);
             setExpired(true);
-            const bookingState = bookingData.bookingStatus || bookingData.status;
-            if (['reserved', 'occupied', 'active'].includes(bookingState)) {
-              cancelBooking(bookingId).catch(() => {});
-            }
+            // Firestore expireBookingIfNeeded marks booking expired on next snapshot read.
           }
         };
         updateCountdown();
@@ -91,9 +90,7 @@ Status: ${booking.bookingStatus || booking.status}`,
     });
   };
 
-  const ticketData = booking
-    ? JSON.stringify({ bookingId: booking.bookingId, slotId: booking.slotId, userId: booking.userId, status: booking.bookingStatus || booking.status })
-    : '';
+  const ticketData = booking ? buildBookingQrPayload(booking) : '';
 
   if (loading) {
     return (
@@ -128,14 +125,10 @@ Status: ${booking.bookingStatus || booking.status}`,
       <View style={styles.detailCard}>
         <Text style={styles.detailLabel}>Ticket number</Text>
         <Text style={styles.detailValue}>{booking.bookingId}</Text>
-        <Text style={styles.detailLabel}>Slot ID</Text>
-        <Text style={styles.detailValue}>{booking.slotId}</Text>
-        {slot?.parkingArea && (
-          <>
-            <Text style={styles.detailLabel}>Area name</Text>
-            <Text style={styles.detailValue}>{slot.parkingArea}</Text>
-          </>
-        )}
+        <Text style={styles.detailLabel}>Slot</Text>
+        <Text style={styles.detailValue}>{getBookingSlotName(booking)}</Text>
+        <Text style={styles.detailLabel}>Area</Text>
+        <Text style={styles.detailValue}>{getBookingAreaName(booking)}</Text>
         {(booking.userName || booking.userId) && (
           <>
             <Text style={styles.detailLabel}>User name</Text>
@@ -305,7 +298,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   instructionsCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.primaryLight,
     borderRadius: 16,
     padding: 14,
     marginTop: 18,

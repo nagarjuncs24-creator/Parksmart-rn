@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { subscribeAuth } from './src/services/auth';
 import { checkAdminAccess } from './src/services/firestore';
+import { initNotifications } from './src/services/notifications';
 
 import SplashScreen from './src/screens/SplashScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -13,20 +14,35 @@ import BookingScreen from './src/screens/BookingScreen';
 import ConfirmationScreen from './src/screens/ConfirmationScreen';
 import PaymentScreen from './src/screens/PaymentScreen';
 import TicketScreen from './src/screens/TicketScreen';
+import ReceiptScreen from './src/screens/ReceiptScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
+import BookingDetailsScreen from './src/screens/BookingDetailsScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import AdminScreen from './src/screens/AdminScreen';
 import AccessDeniedScreen from './src/screens/AccessDeniedScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const HistoryStack = createNativeStackNavigator();
+
+function HistoryNavigator() {
+  return (
+    <HistoryStack.Navigator screenOptions={{ headerShown: false }}>
+      <HistoryStack.Screen name="HistoryList" component={HistoryScreen} />
+      <HistoryStack.Screen name="BookingDetails" component={BookingDetailsScreen} />
+      <HistoryStack.Screen name="Receipt" component={ReceiptScreen} />
+      <HistoryStack.Screen name="Notifications" component={NotificationsScreen} />
+    </HistoryStack.Navigator>
+  );
+}
 
 function MainTabs() {
   return (
     <Tab.Navigator screenOptions={{ headerShown: false }}>
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'Home' }} />
       <Tab.Screen name="Booking" component={BookingScreen} options={{ tabBarLabel: 'Booking' }} />
-      <Tab.Screen name="History" component={HistoryScreen} options={{ tabBarLabel: 'History' }} />
+      <Tab.Screen name="History" component={HistoryNavigator} options={{ tabBarLabel: 'History' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />
     </Tab.Navigator>
   );
@@ -36,6 +52,10 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    initNotifications().catch(() => {});
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeAuth((currentUser) => {
@@ -54,6 +74,7 @@ export default function App() {
         }
         setUser(currentUser);
         setAuthReady(true);
+        initNotifications().catch(() => {});
       }
       resolveRole();
     });
@@ -73,6 +94,7 @@ export default function App() {
         <Stack.Screen name="Booking" component={BookingScreen} />
         <Stack.Screen name="Confirmation" component={ConfirmationScreen} />
         <Stack.Screen name="Payment" component={PaymentScreen} />
+        <Stack.Screen name="Receipt" component={ReceiptScreen} />
         <Stack.Screen name="Ticket" component={TicketScreen} />
         <Stack.Screen name="AdminDashboard" component={AdminScreen} />
         <Stack.Screen name="AccessDenied" component={AccessDeniedScreen} />

@@ -2,8 +2,16 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { colors } from '../constants/theme';
 import { getCurrentUser } from '../services/auth';
-import { createBooking, updateSlotStatus, getSlotById } from '../services/firestore';
+import {
+  createBooking,
+  createPayment,
+  updateSlotStatus,
+  getSlotById,
+  getUserById,
+} from '../services/firestore';
 import { processTestPayment } from '../services/payment';
+import { getSlotDisplayName } from '../utils/slots';
+import { notifyBookingFlow } from '../services/notifications';
 
 export default function PaymentScreen({ navigation, route }) {
   const { selectedSlot, durationOption, totalPrice } = route.params || {};
@@ -37,25 +45,50 @@ export default function PaymentScreen({ navigation, route }) {
         throw new Error('Payment failed during test checkout.');
       }
 
+      const profile = await getUserById(currentUser.uid);
+      const areaName = selectedSlot.parkingArea || selectedSlot.areaName || 'Campus Lot';
+      const startTime = new Date();
+      const durationHours = durationOption.hours || 1;
+      const endTime = new Date(startTime.getTime() + durationHours * 60 * 60 * 1000);
+
       const booking = await createBooking({
         userId: currentUser.uid,
-        userName: currentUser.displayName || currentUser.email || 'Guest',
+        userName: currentUser.displayName || profile?.name || currentUser.email || 'Guest',
         slotId: selectedSlot.id,
-        parkingArea: selectedSlot.parkingArea || 'Campus Lot',
-        bookingTime: new Date(),
+        slotName: getSlotDisplayName(selectedSlot),
+        parkingArea: areaName,
+        areaName,
+        vehicleNumber: profile?.vehicleNumber || '',
+        bookingTime: startTime,
+        startTime,
+        endTime,
         status: 'active',
         bookingStatus: 'active',
         paymentStatus: 'success',
-        durationHours: durationOption.hours,
+        durationHours,
         totalPrice,
         paymentProvider: paymentResult.provider,
         paymentReference: paymentResult.transactionId,
         expiresAt: new Date(Date.now() + 15 * 60 * 1000),
       });
 
-      await updateSlotStatus(selectedSlot.id, 'occupied');
+      await createPayment({
+        userId: currentUser.uid,
+        bookingId: booking.id,
+        amount: totalPrice,
+        method: 'Test Payment',
+        transactionId: paymentResult.transactionId,
+        paymentId: paymentResult.transactionId,
+        userName: booking.userName,
+        slotName: booking.slotName,
+        areaName,
+        status: 'success',
+      });
 
-      navigation.replace('Ticket', { bookingId: booking.id });
+      await updateSlotStatus(selectedSlot.id, 'occupied');
+      await notifyBookingFlow(currentUser.uid, booking, areaName);
+
+      navigation.replace('Receipt', { bookingId: booking.id });
     } catch (error) {
       Alert.alert('Payment error', error.message);
     } finally {
@@ -79,7 +112,7 @@ export default function PaymentScreen({ navigation, route }) {
       <Text style={styles.heading}>Payment summary</Text>
       <View style={styles.card}>
         <Text style={styles.label}>Slot</Text>
-        <Text style={styles.value}>{selectedSlot.slotId || selectedSlot.id}</Text>
+        <Text style={styles.value}>{getSlotDisplayName(selectedSlot)}</Text>
         <Text style={styles.label}>Area</Text>
         <Text style={styles.value}>{selectedSlot.parkingArea || 'Campus Lot'}</Text>
         <Text style={styles.label}>Duration</Text>

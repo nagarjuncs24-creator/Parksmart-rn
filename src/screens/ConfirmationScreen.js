@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { colors } from '../constants/theme';
 import { getCurrentUser } from '../services/auth';
+import { getSlotDisplayName } from '../utils/slots';
 import { createBooking, updateSlotStatus } from '../services/firestore';
 
 export default function ConfirmationScreen({ navigation, route }) {
@@ -51,7 +52,7 @@ export default function ConfirmationScreen({ navigation, route }) {
       <Text style={styles.heading}>Confirm your booking</Text>
       <View style={styles.card}>
         <Text style={styles.label}>Slot</Text>
-        <Text style={styles.value}>{selectedSlot.slotId || selectedSlot.id}</Text>
+        <Text style={styles.value}>{getSlotDisplayName(selectedSlot)}</Text>
         <Text style={styles.label}>Area</Text>
         <Text style={styles.value}>{selectedSlot.parkingArea || 'Campus Lot'}</Text>
         <Text style={styles.label}>Duration</Text>

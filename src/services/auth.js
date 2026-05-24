@@ -5,6 +5,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  updateProfile,
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -15,6 +16,10 @@ export async function register(email, password, name) {
       uid: cred.user.uid,
       name,
       email: email.trim().toLowerCase(),
+      phone: '',
+      vehicleNumber: '',
+      vehicleType: 'Car',
+      profileImageUrl: cred.user.photoURL || '',
       role: 'user',
       createdAt: serverTimestamp(),
     };
@@ -48,4 +53,21 @@ export function getCurrentUser() {
 
 export function subscribeAuth(callback) {
   return onAuthStateChanged(auth, callback);
+}
+
+export async function updateAuthUserProfile({ displayName, photoURL }) {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('You must be signed in to update your profile.');
+  }
+
+  const payload = {};
+  if (displayName !== undefined) payload.displayName = displayName;
+  if (photoURL !== undefined) payload.photoURL = photoURL;
+
+  if (Object.keys(payload).length) {
+    await updateProfile(user, payload);
+  }
+
+  return user;
 }
