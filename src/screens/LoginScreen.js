@@ -1,41 +1,169 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
-import { login } from '../services/auth';
+import { View, Text, TextInput, Pressable, StyleSheet, Alert, StatusBar, ActivityIndicator } from 'react-native';
+import { colors } from '../constants/theme';
+import { login, logout } from '../services/auth';
+import { checkAdminAccess } from '../services/firestore';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const handleLogin = async (mode) => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+      Alert.alert('Missing details', 'Please enter email and password to continue.');
       return;
     }
+
     setLoading(true);
     try {
-      await login(email, password);
-      navigation.navigate('Map');
+      const user = await login(email.trim(), password.trim());
+      if (mode === 'admin') {
+        const isAdmin = await checkAdminAccess(user.email);
+        if (!isAdmin) {
+          await logout();
+          Alert.alert('Access denied', 'This account is not registered as an admin.');
+          return;
+        }
+        navigation.reset({ index: 0, routes: [{ name: 'AdminDashboard' }] });
+        return;
+      }
+      navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
     } catch (error) {
-      Alert.alert('Login Failed', error.message);
+      Alert.alert('Login failed', error.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>ParkSmart Login</Text>
-      <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-      <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-      <Button title={loading ? 'Logging in...' : 'Login'} onPress={handleLogin} disabled={loading} />
-      <Button title="Sign Up" onPress={() => navigation.navigate('Register')} />
+    <View style={styles.page}>
+      <StatusBar backgroundColor={colors.primary} barStyle="light-content" />
+      <View style={styles.card}>
+        <Text style={styles.title}>Welcome back</Text>
+        <Text style={styles.subtitle}>Choose how you want to login.</Text>
+
+        <TextInput
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          style={styles.input}
+        />
+
+        <View style={styles.loginButtons}>
+          <Pressable style={[styles.secondaryButton, loading && styles.disabledButton]} onPress={() => handleLogin('user')} disabled={loading}>
+            {loading ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.secondaryButtonText}>User Login</Text>}
+          </Pressable>
+          <Pressable style={[styles.primaryButton, styles.primaryButtonSpacing, loading && styles.disabledButton]} onPress={() => handleLogin('admin')} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Admin Login</Text>}
+          </Pressable>
+        </View>
+
+        <View style={styles.footerRow}>
+          <Text style={styles.footerText}>New to ParkSmart?</Text>
+          <Pressable onPress={() => navigation.navigate('Register')}>
+            <Text style={styles.footerLink}>Create account</Text>
+          </Pressable>
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 12, borderRadius: 8 },
+  page: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  card: {
+    backgroundColor: colors.panel,
+    borderRadius: 28,
+    padding: 28,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  title: {
+    fontSize: 28,
+    color: colors.text,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: colors.secondaryText,
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    backgroundColor: colors.overlay,
+    color: colors.text,
+  },
+  loginButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  primaryButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  primaryButtonSpacing: {
+    marginLeft: 12,
+  },
+  secondaryButton: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  secondaryButtonText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  disabledButton: {
+    opacity: 0.65,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerText: {
+    color: colors.secondaryText,
+    marginRight: 6,
+  },
+  footerLink: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
 });

@@ -1,44 +1,135 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, Alert, StatusBar, ActivityIndicator } from 'react-native';
+import { colors } from '../constants/theme';
 import { register } from '../services/auth';
 
 export default function RegisterScreen({ navigation }) {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!email || !password || !name) {
-      Alert.alert('Error', 'Please fill all fields');
+    if (!name || !email || !password) {
+      Alert.alert('Incomplete form', 'Please fill in all fields to continue.');
       return;
     }
+
     setLoading(true);
     try {
-      await register(email, password, name);
-      Alert.alert('Success', 'Registration complete! Please log in.');
-      navigation.navigate('Login');
+      await register(email.trim(), password.trim(), name.trim());
+      navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
     } catch (error) {
-      Alert.alert('Registration Failed', error.message);
+      Alert.alert('Registration failed', error.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>ParkSmart Sign Up</Text>
-      <TextInput placeholder="Name" value={name} onChangeText={setName} style={styles.input} />
-      <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-      <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
-      <Button title={loading ? 'Signing up...' : 'Sign Up'} onPress={handleRegister} disabled={loading} />
-      <Button title="Back to Login" onPress={() => navigation.navigate('Login')} />
+    <View style={styles.page}>
+      <StatusBar backgroundColor={colors.primary} barStyle="light-content" />
+      <View style={styles.card}>
+        <Text style={styles.title}>Create your account</Text>
+        <Text style={styles.subtitle}>Register now and reserve parking in seconds.</Text>
+
+        <TextInput
+          placeholder="Full Name"
+          value={name}
+          onChangeText={setName}
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          style={styles.input}
+        />
+
+        <Pressable style={styles.primaryButton} onPress={handleRegister} disabled={loading}>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Create account</Text>}
+        </Pressable>
+
+        <View style={styles.footerRow}>
+          <Text style={styles.footerText}>Already have an account?</Text>
+          <Pressable onPress={() => navigation.navigate('Login')}>
+            <Text style={styles.footerLink}>Login</Text>
+          </Pressable>
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 12, borderRadius: 8 },
+  page: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  card: {
+    backgroundColor: colors.panel,
+    borderRadius: 28,
+    padding: 28,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  title: {
+    fontSize: 28,
+    color: colors.text,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: colors.secondaryText,
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    backgroundColor: colors.overlay,
+    color: colors.text,
+  },
+  primaryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerText: {
+    color: colors.secondaryText,
+    marginRight: 6,
+  },
+  footerLink: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
 });
